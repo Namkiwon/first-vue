@@ -1,0 +1,342 @@
+<template lang="html">
+  <div :class="{'autocompletex':vsAutocomplete,'activeOptions':active}" class="con-select">
+    <input
+      @click.stop
+      class="input-select"
+      ref="inputselect"
+      @keydown.esc.stop.prevent="closeOptions"
+      v-bind="$attrs"
+      v-on="listeners"
+      :readonly="!vsAutocomplete"
+      type="text"
+      name="" value=""
+      >
+
+      <i class="material-icons icon-select">
+        <!--keyboard_arrow_down12344-->
+        >
+      </i>
+
+      <transition name="fade-select">
+        <div
+        :style="cords"
+        ref="vsSelectOptions" v-show="active" :class="[`vs-select-${vsColor}`,{'scrollx':this.scrollx}]" class="vs-select-options">
+        <ul ref="ulx">
+          <slot/>
+        </ul>
+        <ul v-show="clear">
+          <li @click="filterItems(''),changeValue()" >
+            {{vsNoData}}
+          </li>
+        </ul>
+      </div>
+    </transition>
+  </div>
+</template>
+
+<script>
+import utils from '../../utils'
+import Fuse from 'fuse.js'
+
+export default {
+  name:'vs-select',
+  props:{
+    value:{},
+    vsNoData:{
+      default:'검색 항목이 없습니다',
+      type:String
+    },
+    vsMaxSelected:{
+      default:null,
+      type:[Number,String]
+    },
+    vsAutocomplete:{
+      default:false,
+      type:Boolean
+    },
+    vsColor:{
+      default:'primary',
+      type:String
+    },
+    vsMultiple:{
+      default:false,
+      type:Boolean
+    }
+  },
+  data:()=>({
+    active:false,
+    valuex:'',
+    clear:false,
+    scrollx:false,
+    cords:{},
+    filterx:false
+  }),
+  mounted(){
+    this.changeValue()
+    utils.insertBody(this.$refs.vsSelectOptions)
+    console.log("this.$children>>>>>>",this.$children);
+  },
+  updated(){
+    //
+    if(!this.active){
+      this.changeValue()
+    }
+  },
+  watch:{
+    value(){
+      this.$emit('change',event)
+    },
+    active(){
+      if(this.active){
+        this.$children.forEach((item)=>{
+          item.focusValue()
+        })
+        setTimeout( () => {
+          if(this.$refs.ulx.scrollHeight >= 260) this.scrollx = true
+        }, 100);
+      }
+    }
+  },
+  computed:{
+    listeners(){
+      return {
+        ...this.$listeners,
+        blur: (event) => {
+          if(this.vsAutocomplete && event.relatedTarget?!event.relatedTarget.closest('.vs-select-options'):false ){
+            this.closeOptions()
+          }
+          this.$emit('blur',event)
+        },
+        focus: (event) => {
+          this.$emit('focus',event)
+          // document.removeEventListener('click',this.clickBlur)
+          this.focus(event)
+        },
+        input: (event) => {
+          return
+        },
+        keyup: (event) => {
+
+          if(event.key == 'ArrowDown' || event.key == 'ArrowUp'){
+            event.preventDefault()
+
+            let childrens = this.$children.filter((item)=>{
+              return item.visible
+            })
+
+            // let childrens = fuse
+            childrens[0].$el.querySelector('.vs-select-item-btn').focus()
+          } else {
+            if(this.vsAutocomplete){
+              console.log(event.target.value)
+              console.log(this.$children)
+              this.fuzzy(event.target.value)
+              // this.filterItems(event.target.value)
+            }
+          }
+
+          this.$children.map((item)=>{
+            item.valueInputx = this.$refs.inputselect.value
+          })
+        }
+      }
+    },
+  },
+  methods:{
+    addMultiple(value){
+      if(this.value.includes(value)){
+
+        this.value.splice(this.value.indexOf(value),1)
+        this.changeValue()
+        if(this.vsAutocomplete) {
+          this.$refs.inputselect.focus()
+        }
+      } else {
+        if(this.vsAutocomplete){
+          this.value.push(value)
+          this.filterItems('')
+          this.changeValue()
+          // this.$refs.inputselect.value += ','
+          this.$refs.inputselect.focus()
+        } else {
+          this.value.push(value)
+          this.changeValue()
+        }
+      }
+
+    },
+    fuzzy(value){
+      if(value){
+        this.filterx = true
+      } else {
+        this.filterx = false
+      }
+
+      var options = {
+        keys: ['text'],
+        id: 'text'
+      }
+
+
+
+      let items = this.$children
+      var list = []
+      items.forEach((item)=>{
+        var obj = {}
+        obj["text"] = item.vsText
+        list.push(obj)
+      })
+      var fuse = new Fuse(list, options)
+      console.log("======")
+      console.log(list)
+      console.log(value)
+      console.log("search")
+      let search = fuse.search(value)
+      console.log(search)
+      console.log("======")
+
+      items.map((item)=>{
+        // let text = item.$el.innerText.replace('check_circle','')
+        let text = item.vsText
+        if(this.vsMultiple){
+          let valuesx = value.split(',')
+          valuesx.forEach((value_multi)=>{
+            if(search.includes(text)){
+              item.visible = true
+            }else{
+              item.visible = false
+            }
+          })
+
+        }
+        //
+        else {
+          if(search.includes(text)){
+            item.visible = true
+          }else{
+            item.visible = false
+          }
+        }
+
+      })
+
+      let lengthx = items.filter((item)=>{
+        return item.visible
+      })
+      //
+      if(lengthx.length == 0){
+        this.clear = true
+      } else {
+        this.clear = false
+      }
+
+    },
+    filterItems(value){
+      if(value){
+        this.filterx = true
+      } else {
+        this.filterx = false
+      }
+      let items = this.$children
+      items.map((item)=>{
+        // let text = item.$el.innerText.replace('check_circle','')
+        let text = item.vsText
+        if(this.vsMultiple){
+          let valuesx = value.split(',')
+          valuesx.forEach((value_multi)=>{
+            if(text.toUpperCase().indexOf(value_multi.toUpperCase()) == -1){
+              item.visible = false
+            } else {
+              item.visible = true
+            }
+          })
+
+        } else {
+          if(text.toUpperCase().indexOf(value.toUpperCase()) == -1){
+            item.visible = false
+          } else {
+            item.visible = true
+          }
+        }
+
+      })
+
+      let lengthx = items.filter((item)=>{
+        return item.visible
+      })
+
+      if(lengthx.length == 0){
+        this.clear = true
+      } else {
+        this.clear = false
+      }
+    },
+    changeValue(){
+      if(this.vsMultiple){
+        let values = this.value
+        let options = this.$children
+        let optionsValues = []
+        values.forEach((item)=>{
+          options.forEach((item_option)=>{
+            if(item_option.vsValue == item) {
+              let text = item_option.vsText
+              text = text.replace('check_circle','')
+              optionsValues.push(text.trim())
+            }
+          })
+        })
+        this.$refs.inputselect.value = optionsValues.toString()
+
+      } else {
+        this.$refs.inputselect.value = this.valuex
+
+      }
+    },
+    focus(event){
+      this.active = true
+      let inputx = this.$refs.inputselect
+      setTimeout( ()=> {
+        document.addEventListener('click',this.clickBlur)
+      }, 100);
+      if(this.vsAutocomplete && this.vsMultiple){
+        setTimeout( ()=> {
+          if(inputx.value){
+            this.$refs.inputselect.value = inputx.value += ','
+          }
+          inputx.selectionStart = inputx.selectionEnd = 10000;
+        }, 10);
+
+      } else if (this.vsAutocomplete && !this.vsMultiple) {
+        this.$refs.inputselect.select()
+      }
+
+      if (!this.vsAutocomplete) {
+        if(this.vsMultiple?this.value.length == 0:!this.value || this.vsMultiple){
+          setTimeout( () => {
+            this.$children[0].$el.querySelector('.vs-select-item-btn').focus()
+          }, 50);
+        }
+      }
+      // this.changePosition()
+      this.cords = utils.changePosition(this.$refs.inputselect,this.$refs.vsSelectOptions,(this.vsAutocomplete))
+
+    },
+    clickBlur(event){
+      let closestx = event.target.closest('.vs-select-options')
+      if(!closestx){
+        this.closeOptions()
+        this.filterItems('')
+        this.changeValue()
+      }
+    },
+    closeOptions(){
+      // this.$refs.inputselect.blur()
+      this.active = false
+      document.removeEventListener('click',this.clickBlur)
+    },
+  }
+}
+</script>
+<style>
+
+</style>
